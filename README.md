@@ -59,4 +59,3 @@ Edit konfigurasi, masukkan nomer admin dan api gemini anda
 
 ![Versi](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Lisensi](https://img.shields.io/badge/license-MIT-green.svg)
-Proyek ini dilisensikan di bawah [Lisensi MIT](LICENSE).
