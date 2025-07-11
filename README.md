@@ -24,9 +24,16 @@ Sebelum instalasi, pastikan sistem Anda (disarankan server Linux/VPS) memiliki:
 - **Curl** (biasanya sudah terinstal di sebagian besar sistem Linux)
 
 ## Instalasi Cepat (Direkomendasikan)
+
+### Untuk VPS Linux (Debian/Ubuntu/Etc)
 ```bash
 curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/main/install.sh | bash
 ```
+### Untuk Termux (Android)
+```bash
+curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/main/termux-install.sh | bash
+```
+
 ## Instalasi Manual
 
 1.  **Clone Repositori**
