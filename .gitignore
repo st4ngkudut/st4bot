@@ -1,0 +1,17 @@
+# Ketergantungan Node.js
+node_modules/
+
+# File Sesi & Database (SANGAT SENSITIF!)
+auth_info_baileys/
+bot_database.db
+database.json
+
+# File Konfigurasi (SANGAT SENSITIF!)
+config.json
+
+# File Media & Stiker
+media_files/
+sticker_tmp/
+
+# Log PM2
+*.log
