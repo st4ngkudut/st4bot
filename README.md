@@ -27,12 +27,24 @@ Sebelum instalasi, pastikan sistem Anda (disarankan server Linux/VPS) memiliki:
 ```bash
 curl -sL (https://raw.githubusercontent.com/st4ngkudut/st4bot/main/install.sh) | bash
 ```
+## Instalasi Manual
 
-## Konfigurasi
-
-```bash
-cp -r example.config.json config.json
-```
+1.  **Clone Repositori**
+    ```bash
+    git clone https://github.com/st4ngkudut/st4bot.git
+    ```
+2.  **Masuk ke Direktori Proyek**
+    ```bash
+    cd st4bot
+    ```
+3.  **Install Dependensi**
+    ```bash
+    npm install
+    ```
+4.  **Edit File Konfigurasi**
+    ```bash
+    cp -r example.config.json config.json && nano config.json
+    ```
 Edit konfigurasi, masukkan nomer admin dan api gemini anda
 
 ## Menjalankan Bot
