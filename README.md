@@ -25,7 +25,7 @@ Sebelum instalasi, pastikan sistem Anda (disarankan server Linux/VPS) memiliki:
 
 ## Instalasi Cepat (Direkomendasikan)
 ```bash
-curl -sL (https://raw.githubusercontent.com/st4ngkudut/st4bot/main/install.sh) | bash
+curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/main/install.sh | bash
 ```
 ## Instalasi Manual
 
