@@ -1,4 +1,4 @@
-# st4bot - Bot WhatsApp Multifungsi
+# ST4BOT - Bot WhatsApp Multifungsi
 
 
 **st4bot** adalah sebuah bot WhatsApp serbaguna yang dibangun menggunakan Node.js dan Baileys. Terinspirasi dari fungsionalitas Rose Bot di Telegram, bot ini dikembangkan dengan berbagai fitur canggih, mulai dari moderasi grup otomatis, utilitas sehari-hari, hingga integrasi dengan AI generatif Google Gemini.
