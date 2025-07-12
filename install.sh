@@ -5,9 +5,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=============================================${NC}"
-echo -e "${GREEN}   Skrip Instalasi Otomatis st4bot v1.0    ${NC}"
-echo -e "${GREEN}=============================================${NC}"
+echo -e "${GREEN}====================================================${NC}"
+echo -e "${GREEN}   Skrip Instalasi Otomatis st4bot (Retail Version)   ${NC}"
+echo -e "${GREEN}====================================================${NC}"
 echo ""
 
 # --- Langkah 1: Instalasi Dependensi Sistem ---
@@ -17,7 +17,7 @@ sudo apt-get update
 echo -e "\n${YELLOW}> Menginstall git, nodejs, npm, dan ffmpeg...${NC}"
 sudo apt-get install -y git nodejs npm ffmpeg
 
-# Cek jika npm butuh perbaikan (umum di beberapa OS)
+# Cek jika npm butuh perbaikan
 if ! command -v npm &> /dev/null
 then
     echo -e "\n${YELLOW}> Memperbaiki instalasi npm...${NC}"
@@ -31,8 +31,11 @@ echo -e "\n${YELLOW}> Menginstall PM2 secara global...${NC}"
 sudo npm install -g pm2
 
 # --- Langkah 3: Clone Repositori dan Instal Dependensi Bot ---
-echo -e "\n${YELLOW}> Mengunduh bot dari GitHub...${NC}"
-git clone https://github.com/st4ngkudut/st4bot.git
+echo -e "\n${YELLOW}> Mengunduh bot dari branch 'retailversion'...${NC}"
+# Hapus folder lama jika ada untuk menghindari konflik
+rm -rf st4bot
+# Clone branch spesifik
+git clone -b retailversion https://github.com/st4ngkudut/st4bot.git
 cd st4bot
 
 echo -e "\n${YELLOW}> Menginstall dependensi Node.js untuk bot...${NC}"
@@ -64,7 +67,6 @@ pm2 start index.js --name "st4bot"
 echo -e "\n${YELLOW}> Menyimpan daftar proses PM2...${NC}"
 pm2 save
 echo -e "\n${YELLOW}> Membuat skrip startup PM2...${NC}"
-# Perintah ini akan menghasilkan perintah lain yang perlu Anda salin dan jalankan
 pm2 startup
 
 # --- Instruksi Final ---
