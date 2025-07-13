@@ -2,12 +2,14 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLat
 const pino = require('pino');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
+const path = require('path');
 const cron = require('node-cron');
 const qrcode = require('qrcode-terminal');
 const sqlite3 = require('sqlite3').verbose();
 const { Collection } = require('@discordjs/collection');
+const axios = require('axios');
 const loadCommands = require('./utils/command-handler');
-const { OWNER_NAME, GITHUB_LINK, DB_FILE_PATH, CONFIG_FILE_PATH, MEDIA_DIR, STICKER_TMP_DIR, calculateNextRun } = require('./utils/helpers');
+const { OWNER_NAME, DB_FILE_PATH, CONFIG_FILE_PATH, MEDIA_DIR, STICKER_TMP_DIR, calculateNextRun } = require('./utils/helpers');
 const handleNonCommand = require('./utils/non-command-handler');
 
 // Pastikan direktori ada
@@ -53,6 +55,7 @@ db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS warnings (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT NOT NULL, user_jid TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 1, UNIQUE(group_jid, user_jid))`);
     db.run(`CREATE TABLE IF NOT EXISTS badwords (id INTEGER PRIMARY KEY AUTOINCREMENT, jid TEXT NOT NULL, word TEXT NOT NULL, UNIQUE(jid, word))`);
     db.run(`CREATE TABLE IF NOT EXISTS racks (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT NOT NULL, rak_name TEXT NOT NULL, assigned_to TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'BELUM SELESAI', completed_by TEXT, completed_at TEXT, UNIQUE(group_jid, rak_name))`);
+    db.run(`CREATE TABLE IF NOT EXISTS prayer_reminders (group_jid TEXT PRIMARY KEY, city_id TEXT NOT NULL, city_name TEXT NOT NULL, is_active BOOLEAN NOT NULL DEFAULT 1)`);
     console.log('Pemeriksaan tabel selesai.');
 });
 
@@ -61,12 +64,14 @@ db.serialize(() => {
 const filtersCache = new Map();
 const badwordsCache = new Map();
 const pendingConfirmation = new Map();
+const prayerTimeCache = new Map();
+const reminderSent = new Map();
 
 async function main() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version } = await fetchLatestBaileysVersion();
 
-const sock = makeWASocket({
+    const sock = makeWASocket({
         version,
         auth: state,
         logger: pino({
@@ -74,13 +79,14 @@ const sock = makeWASocket({
             transport: {
                 target: 'pino-pretty',
                 options: {
-                    colorize: true, // Memberi warna pada log (merah untuk error, dll)
-                    translateTime: 'SYS:dd-mm-yyyy HH:MM:ss', // Format waktu yang mudah dibaca
-                    ignore: 'pid,hostname' // Menghilangkan info yang tidak perlu
+                    colorize: true,
+                    translateTime: 'SYS:dd-mm-yyyy HH:MM:ss',
+                    ignore: 'pid,hostname'
                 }
             }
         }),
     });
+
     // Pasang properti penting ke objek 'sock' agar bisa diakses di semua perintah
     sock.commands = await loadCommands();
     sock.db = db;
@@ -88,6 +94,62 @@ const sock = makeWASocket({
     sock.filtersCache = filtersCache;
     sock.badwordsCache = badwordsCache;
     sock.pendingConfirmation = pendingConfirmation;
+
+    // =================================================================
+    // BAGIAN PENJADWAL (CRON JOBS)
+    // =================================================================
+
+    // Cron job untuk pengingat sholat (berjalan setiap menit)
+    cron.schedule('* * * * *', async () => {
+        const now = new Date();
+        const todayKey = now.toISOString().split('T')[0];
+        const currentTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' });
+
+        if (currentTime === '00:01') {
+            reminderSent.clear();
+            prayerTimeCache.clear();
+            sock.logger.info('Resetting prayer reminders and cache for the new day.');
+        }
+
+        db.all('SELECT * FROM prayer_reminders WHERE is_active = 1', async (err, groups) => {
+            if (err) return sock.logger.error({ err }, "Gagal mengambil data pengingat sholat");
+
+            for (const group of groups) {
+                try {
+                    let timings = prayerTimeCache.get(group.city_name);
+                    if (!timings) {
+                        const url = `http://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(group.city_name)}&country=Indonesia&method=11`;
+                        const response = await axios.get(url);
+                        if (response.data.code === 200) {
+                            timings = response.data.data.timings;
+                            prayerTimeCache.set(group.city_name, timings);
+                            sock.logger.info(`Prayer schedule cached for city: ${group.city_name}`);
+                        } else continue;
+                    }
+
+                    for (const [prayer, time] of Object.entries(timings)) {
+                        if (['Sunrise'].includes(prayer)) continue;
+                        
+                        const reminderKey = `${todayKey}_${group.group_jid}_${prayer}`;
+                        if (time === currentTime && !reminderSent.has(reminderKey)) {
+                            const prayerNameMap = { Fajr: 'Subuh', Dhuhr: 'Dzuhur', Asr: 'Ashar', Maghrib: 'Maghrib', Isha: 'Isya', Imsak: 'Imsak' };
+                            const prayerName = prayerNameMap[prayer] || prayer;
+
+                            const message = prayer.toLowerCase() === 'imsak' 
+                                ? `🔔 Waktu *Imsak* untuk wilayah *${group.city_name}* dan sekitarnya. Selamat menunaikan ibadah puasa.`
+                                : `🕌 Waktu Sholat *${prayerName}* untuk wilayah *${group.city_name}* dan sekitarnya telah tiba.`;
+                            
+                            await sock.sendMessage(group.group_jid, { text: message });
+                            reminderSent.set(reminderKey, true);
+                            sock.logger.info(`Prayer reminder sent for ${prayerName} to group ${group.group_jid}`);
+                        }
+                    }
+                } catch (e) {
+                    sock.logger.error({ err: e, group: group.group_jid }, "Error on prayer reminder process (Aladhan API)");
+                }
+            }
+        });
+    });
 
     // Cron job untuk pesan terjadwal
     cron.schedule('* * * * *', () => {
@@ -109,24 +171,21 @@ const sock = makeWASocket({
             });
         });
     });
-
+    // =================================================================
+    
     // Handler Koneksi
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
-        
         if(qr) {
             console.log("------------------------------------------------");
             console.log(" KODE QR DITERIMA, SILAKAN PINDAI SEGERA!");
             console.log("------------------------------------------------");
             qrcode.generate(qr, { small: true });
         }
-
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             sock.logger.info('Koneksi terputus:', lastDisconnect.error, ', menyambungkan kembali:', shouldReconnect);
-            if (shouldReconnect) {
-                main();
-            }
+            if (shouldReconnect) main();
         } else if (connection === 'open') {
             sock.logger.info('Koneksi berhasil tersambung!');
             if (config.owner) {
@@ -163,18 +222,15 @@ const sock = makeWASocket({
             return handleNonCommand(sock, msg);
         }
 
-        // Pisahkan argumen dan nama perintah
         const args = text.slice(prefix.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
         const command = sock.commands.get(commandName) || sock.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
         
         const sender = msg.key.participant || msg.key.remoteJid;
         
-        // Handler untuk konfirmasi
         const confirmKey = `${msg.key.remoteJid}:${sender}`;
         if (pendingConfirmation.has(confirmKey)) {
             const confirmData = pendingConfirmation.get(confirmKey);
-            // .confirmreset -> confirmreset
             if (commandName === confirmData.command.slice(1)) { 
                 pendingConfirmation.delete(confirmKey);
                 await confirmData.action();
@@ -182,7 +238,6 @@ const sock = makeWASocket({
             }
         }
 
-        // Jika bukan perintah, mungkin itu adalah catatan (#note)
         if (!command) {
             if (text.startsWith('#')) {
                 const noteName = text.substring(1).toLowerCase().trim();

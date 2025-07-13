@@ -2,25 +2,45 @@ const { isGroupAdmin } = require('../../utils/helpers');
 
 module.exports = {
     name: 'approve',
-    description: 'Menyetujui atau langsung menyelesaikan satu atau lebih tugas rak.',
-    usage: 'approve <rak1>, <rak2>, ...',
+    description: 'Menyetujui atau langsung menyelesaikan tugas rak. Bisa dengan membalas pesan laporan atau mengetik nama rak.',
+    usage: 'approve <rak1>, <rak2>, ... atau .approve (sambil membalas pesan)',
     category: 'checklist',
     execute: async (sock, msg, args) => {
         const from = msg.key.remoteJid;
         const sender = msg.key.participant || from;
         const isGroup = from.endsWith('@g.us');
+        const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
         if (!isGroup) return sock.sendMessage(from, { text: 'Perintah ini hanya untuk grup.' });
 
         const senderIsAdmin = await isGroupAdmin(sock, from, sender);
         if (!senderIsAdmin) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk admin grup.' });
 
+        let rakNames = [];
         const rakInput = args.join(' ');
-        if (!rakInput) {
-            return sock.sendMessage(from, { text: 'Sebutkan satu atau lebih nama rak yang akan disetujui, pisahkan dengan koma.\nContoh: `.approve rak dapur, rak kamar`' }, { quoted: msg });
+
+        // --- LOGIKA BARU: CEK JIKA ADA BALASAN PESAN ---
+        if (quotedMsg) {
+            const repliedText = quotedMsg.conversation || quotedMsg.extendedTextMessage?.text || '';
+            // Ekstrak nama rak dari pesan notifikasi ".selesai"
+            const match = repliedText.match(/Tugas \*([^*]+)\*/);
+            
+            if (match && match[1]) {
+                rakNames.push(match[1]); // Proses rak yang ditemukan dari balasan
+            } else {
+                // Jika membalas pesan tapi formatnya salah
+                return sock.sendMessage(from, { text: 'Balasan tidak valid. Pastikan Anda membalas pesan laporan `.selesai` yang benar.' }, { quoted: msg });
+            }
+        } 
+        // --- LOGIKA LAMA: JIKA TIDAK ADA BALASAN, PROSES DARI TEKS ---
+        else if (rakInput) {
+            rakNames = rakInput.split(',').map(name => name.trim()).filter(Boolean);
+        } 
+        // --- JIKA TIDAK ADA INPUT SAMA SEKALI ---
+        else {
+            return sock.sendMessage(from, { text: 'Sebutkan nama rak, atau balas pesan laporan `.selesai` dengan perintah ini.' }, { quoted: msg });
         }
 
-        const rakNames = rakInput.split(',').map(name => name.trim()).filter(Boolean);
         if (rakNames.length === 0) {
             return sock.sendMessage(from, { text: 'Tidak ada nama rak yang valid untuk diproses.' }, { quoted: msg });
         }
@@ -31,10 +51,10 @@ module.exports = {
         let notFoundRacks = [];
         let alreadyDoneRacks = [];
         
-        // Menggunakan Promise.all untuk memproses semua rak secara bersamaan
         await Promise.all(rakNames.map(async (rakName) => {
             return new Promise((resolve) => {
-                sock.db.get('SELECT * FROM racks WHERE group_jid = ? AND rak_name = ?', [from, rakName], (err, row) => {
+                const query = 'SELECT * FROM racks WHERE group_jid = ? AND rak_name = ? COLLATE NOCASE';
+                sock.db.get(query, [from, rakName], (err, row) => {
                     if (err) {
                         sock.logger.error({ err }, `Gagal mencari rak ${rakName}`);
                         resolve();
@@ -48,12 +68,11 @@ module.exports = {
                     }
 
                     if (row.status === 'SELESAI') {
-                        alreadyDoneRacks.push(rakName);
+                        alreadyDoneRacks.push(row.rak_name);
                         resolve();
                         return;
                     }
 
-                    // Jika sudah PENDING, gunakan user yang menyelesaikan. Jika BELUM, gunakan admin yang approve.
                     const completedBy = row.completed_by || sender;
                     const completedAt = Date.now().toString();
 
@@ -61,7 +80,7 @@ module.exports = {
                         if (updateErr) {
                             sock.logger.error({ updateErr }, `Gagal update rak ${rakName}`);
                         } else {
-                            approvedRacks.push(rakName);
+                            approvedRacks.push(row.rak_name);
                         }
                         resolve();
                     });
@@ -69,7 +88,6 @@ module.exports = {
             });
         }));
 
-        // Membuat pesan laporan hasil
         let responseText = `📝 *Laporan Persetujuan Rak*\n`;
         let mentions = [sender];
 

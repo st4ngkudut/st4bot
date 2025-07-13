@@ -1,5 +1,5 @@
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
-const ffmpeg = require('fluent-ffmpeg');
+const { exec } = require('child_process'); // Menggunakan modul bawaan Node.js
 const fs = require('fs');
 const path = require('path');
 const { STICKER_TMP_DIR } = require('../../utils/helpers');
@@ -41,31 +41,23 @@ module.exports = {
                 const outputFile = path.join(STICKER_TMP_DIR, `${timestamp}.webp`);
                 fs.writeFileSync(inputFile, buffer);
 
-                ffmpeg(inputFile)
-                    .outputOptions([
-                        '-vcodec', 'libwebp',
-                        '-vf', "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:-1:-1:color=white@0.0",
-                        '-loop', '0',
-                        '-ss', '00:00:00.0',
-                        '-t', '00:00:06.0', // Batasi durasi hingga 6 detik
-                        '-preset', 'default',
-                        '-an',
-                        '-vsync', '0',
-                        '-q:v', '50' // Kualitas stiker (0-100, lebih rendah = kualitas lebih baik & ukuran lebih besar)
-                    ])
-                    .toFormat('webp')
-                    .save(outputFile)
-                    .on('end', async () => {
-                        await sock.sendMessage(from, { sticker: { url: outputFile } });
-                        fs.unlinkSync(inputFile);
-                        fs.unlinkSync(outputFile);
-                    })
-                    .on('error', async (err) => {
-                        sock.logger.error({ err }, "Error FFMPEG");
-                        await sock.sendMessage(from, { text: 'Gagal membuat stiker bergerak. Pastikan ffmpeg terinstall di server.' }, { quoted: msg });
-                        fs.unlinkSync(inputFile);
-                        if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
-                    });
+                // Perintah FFMPEG yang lebih kuat dan dieksekusi langsung
+                const ffmpegCommand = `ffmpeg -i ${inputFile} -vcodec libwebp -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:-1:-1:color=white@0.0" -loop 0 -ss 00:00:00.0 -t 00:00:05.9 -preset default -an -vsync 0 -q:v 70 ${outputFile}`;
+
+                exec(ffmpegCommand, async (error, stdout, stderr) => {
+                    // Hapus file input setelah selesai atau gagal
+                    fs.unlinkSync(inputFile);
+
+                    if (error) {
+                        sock.logger.error({ error: error.message, stderr }, "Error FFMPEG saat eksekusi langsung");
+                        await sock.sendMessage(from, { text: 'Gagal total membuat stiker bergerak. Kemungkinan besar instalasi FFmpeg di server bermasalah atau tidak mendukung libwebp. Hubungi admin server.' }, { quoted: msg });
+                        return;
+                    }
+
+                    // Jika berhasil, kirim stiker lalu hapus file output
+                    await sock.sendMessage(from, { sticker: { url: outputFile } });
+                    fs.unlinkSync(outputFile);
+                });
             }
         } catch (error) {
             sock.logger.error({ error }, "Error membuat stiker");
@@ -74,3 +66,4 @@ module.exports = {
         }
     }
 };
+
