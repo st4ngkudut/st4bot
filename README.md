@@ -53,11 +53,14 @@ Script ini akan secara otomatis mengunduh branch `retailversion` dan menyiapkan 
 
 -   **Untuk VPS Linux (Debian/Ubuntu/dll.):**
     ```bash
-    curl -sL [https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/install.sh](https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/install.sh) | bash
+    curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/install.sh | bash
     ```
+-   **Untuk Openwrt:**
+    ```bash
+    curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/openwrt-install.sh | bash
 -   **Untuk Termux (Android):**
     ```bash
-    curl -sL [https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/termux-install.sh](https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/termux-install.sh) | bash
+    curl -sL https://raw.githubusercontent.com/st4ngkudut/st4bot/retailversion/termux-install.sh | bash
     ```
 
 #### ► Instalasi Manual
